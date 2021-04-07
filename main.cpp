@@ -108,11 +108,19 @@ struct VBO_manager {
         float y2 = y + 25;
         XGetWindowAttributes(display, main_win, &gwa);
         size_t prev_capacity = _data.capacity();
+        size_t prev_size = _data.size();
         std::vector<float> to_push_back = {x * (2.0f / gwa.width) - 1.0f, -y * (2.0f / gwa.height) + 1.0f, 0.0f,
                                            x1 * (2.0f / gwa.width) - 1.0f, -y1 * (2.0f / gwa.height) + 1.0f, 0.0f,
                                            x2 * (2.0f / gwa.width) - 1.0f, -y2 * (2.0f / gwa.height) + 1.0f, 0.0f};
         std::copy (to_push_back.begin(), to_push_back.end(), back_inserter( _data));
-        glBufferData(GL_ARRAY_BUFFER, _data.size() * sizeof(float), _data.data(), GL_DYNAMIC_DRAW);
+        if (_data.capacity() != prev_capacity){
+            glBufferData(GL_ARRAY_BUFFER, _data.capacity() * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, _data.size() * sizeof(float), _data.data());
+            std::cout<<"VBO realloc" << std::endl;
+        }
+        else{
+            glBufferSubData(GL_ARRAY_BUFFER, prev_size * sizeof(float), to_push_back.size() * sizeof(float), to_push_back.data());
+        }
         return;
     }
 
@@ -125,32 +133,6 @@ struct VBO_manager {
     }
 };
 
-
-/*to_draw create_triangle() {
-    float vertices[] = {
-            // positions
-            0.5f, -0.5f, 0.0f,
-            -0.5f, -0.5f, 0.0f,
-            0.0f, 0.5f, 0.0f
-    };
-    auto shaderProgram = get_shader_program();
-    GLuint VBO;//id of buffer for vertices
-    glGenBuffers(1, &VBO);
-    //Vertex Array Object
-    GLuint VAO;
-    glGenVertexArrays(1, &VAO);
-    glBindVertexArray(VAO);
-    //copy vertices array to buffer
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *) 0);
-    glEnableVertexAttribArray(0);
-    // color attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *) (3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    return to_draw{shaderProgram, VAO};
-}*/
 
 std::array<float, 3> get_float_from_rgb(unsigned long rgb) {
     std::array<float, 3> float_colors;
