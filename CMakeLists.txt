@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.17)
+project(jbtreug)
+
+set(CMAKE_CXX_STANDARD 17)
+
+add_link_options(-lX11 -lGL -lGLU)
+add_executable(jbtreug main.cpp)
