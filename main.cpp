@@ -15,6 +15,10 @@
 #include <string.h>
 #include <sstream>
 
+int WIDTH = 800;
+int HEIGHT = 600;
+float ASPECT = float(WIDTH)/HEIGHT;
+
 Display *display;
 Window root_win;
 GLint att_list[] = {GLX_RGBA, None};//describes the color encoding properties
@@ -25,7 +29,6 @@ Window main_win;
 GLXContext glc;
 XWindowAttributes gwa;
 XEvent xev;
-unsigned long background_color = 0x25854b;
 
 
 GLchar *vertexShaderSource =
@@ -71,26 +74,17 @@ unsigned int get_shader_program() {
     return shaderProgram;
 }
 
-struct VBO_manager {
+struct triangles_manager {
     GLuint VBO;
     GLuint VAO;
     GLuint shaderProgram;
     std::vector<float> _data;
 
-    explicit VBO_manager(GLuint size) {
-        _data.reserve(size);
-        shaderProgram = get_shader_program();
-        glGenBuffers(1, &VBO);
-        glGenVertexArrays(1, &VAO);
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, size * sizeof(float), NULL, GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) 0);
-        glEnableVertexAttribArray(0);
-        glBindVertexArray(0);
-    }
+    triangles_manager() = default;
+    ~triangles_manager() = default;
 
-    explicit VBO_manager(const std::vector<float> &data) : _data(data) {
+    void LoadData(const std::vector<float> &data) {
+        _data = data;
         shaderProgram = get_shader_program();
         glGenBuffers(1, &VBO);
         glGenVertexArrays(1, &VAO);
@@ -102,16 +96,18 @@ struct VBO_manager {
     }
 
     void add_triangle(float x, float y){
-        float x1 = x - 20;
-        float x2 = x + 20;
-        float y1 = y + 25;
-        float y2 = y + 25;
-        XGetWindowAttributes(display, main_win, &gwa);
+        float h = 0.04;
+        x = x * (2.0f / WIDTH) - 1.0f;
+        y = -y * (2.0f / HEIGHT) + 1.0f;
+        float x1 = x - h;
+        float x2 = x + h;
+        float y1 = y + 1.5f * h;
+        float y2 = y + 1.5f * h;
         size_t prev_capacity = _data.capacity();
         size_t prev_size = _data.size();
-        std::vector<float> to_push_back = {x * (2.0f / gwa.width) - 1.0f, -y * (2.0f / gwa.height) + 1.0f, 0.0f,
-                                           x1 * (2.0f / gwa.width) - 1.0f, -y1 * (2.0f / gwa.height) + 1.0f, 0.0f,
-                                           x2 * (2.0f / gwa.width) - 1.0f, -y2 * (2.0f / gwa.height) + 1.0f, 0.0f};
+        std::vector<float> to_push_back = {x, y, 0.0f,
+                                           x1, y1, 0.0f,
+                                           x2, y2, 0.0f};
         std::copy (to_push_back.begin(), to_push_back.end(), back_inserter( _data));
         if (_data.capacity() != prev_capacity){
             glBufferData(GL_ARRAY_BUFFER, _data.capacity() * sizeof(float), NULL, GL_DYNAMIC_DRAW);
@@ -121,7 +117,6 @@ struct VBO_manager {
         else{
             glBufferSubData(GL_ARRAY_BUFFER, prev_size * sizeof(float), to_push_back.size() * sizeof(float), to_push_back.data());
         }
-        return;
     }
 
     void Draw(){
@@ -142,8 +137,7 @@ std::array<float, 3> get_float_from_rgb(unsigned long rgb) {
     return float_colors;
 }
 
-
-int main() {
+void initX(){
     //connect to X server with NULL display
     //graphical output will be sent to the computer on which it is executed
     display = XOpenDisplay(NULL);
@@ -153,18 +147,27 @@ int main() {
     cmap = XCreateColormap(display, root_win, vi->visual, AllocNone);
     swa.colormap = cmap;
     swa.event_mask = ExposureMask | KeyPressMask | PointerMotionMask | ButtonPressMask | ButtonReleaseMask;
-    main_win = XCreateWindow(display, root_win, 0, 0, 600, 600, 0, vi->depth, InputOutput, vi->visual,
+    main_win = XCreateWindow(display, root_win, 0, 0, WIDTH, HEIGHT, 0, vi->depth, InputOutput, vi->visual,
                              CWColormap | CWEventMask, &swa);
     //CWColormap | CWEventMask - which fields from swa should be taken into account
     XMapWindow(display, main_win);//show window
-    XStoreName(display, main_win, "triforcestriforcestriforces");//change title
+    XStoreName(display, main_win, "tri");//change title
+}
+
+void initGL(){
     glc = glXCreateContext(display, vi, NULL, GL_TRUE);//create context for opengl, GL_FALSE for network
     glXMakeCurrent(display, main_win, glc);//bind context to window
-
-    VBO_manager triangles(0);
-
-    auto bg_fcolor = get_float_from_rgb(background_color);
+    auto bg_fcolor = get_float_from_rgb(0x25854b);
     glClearColor(std::get<0>(bg_fcolor), std::get<1>(bg_fcolor), std::get<2>(bg_fcolor), 1.0f);
+}
+
+
+int main() {
+    initX();
+    initGL();
+    triangles_manager triangles;
+    triangles.LoadData({});
+
     while (True) {
         XNextEvent(display, &xev);
         int x = -1;
@@ -172,6 +175,11 @@ int main() {
         if (xev.type == Expose) {
             XGetWindowAttributes(display, main_win, &gwa);//get win atts, including current width and height
             glViewport(0, 0, gwa.width, gwa.height);
+            WIDTH = gwa.width;
+            HEIGHT = gwa.height;
+            ASPECT = float(WIDTH)/HEIGHT;
+            triangles.Draw();
+            glXSwapBuffers(display, main_win);//exchange front and back buffers
         } else if (xev.type == KeyPress) {
             glXMakeCurrent(display, None, NULL);
             glXDestroyContext(display, glc);
@@ -183,9 +191,9 @@ int main() {
             y = xev.xbutton.y;
             triangles.add_triangle(x, y);
             std::cout << "Mouse click: " << x << ' ' << y << std::endl;
+            triangles.Draw();
+            glXSwapBuffers(display, main_win);//exchange front and back buffers
         }
-        triangles.Draw();
-        glXSwapBuffers(display, main_win);//exchange front and back buffers
     }
     return 0;
 }
