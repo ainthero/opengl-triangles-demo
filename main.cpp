@@ -234,11 +234,13 @@ int main() {
             WIDTH = gwa.width;
             HEIGHT = gwa.height;
         } else if (xev.type == KeyPress) {
-            glXMakeCurrent(display, None, NULL);
-            glXDestroyContext(display, glc);
-            XDestroyWindow(display, main_win);
-            XCloseDisplay(display);
-            return 0;
+            if (XLookupKeysym(&xev.xkey, 0) == XK_Escape){
+                glXMakeCurrent(display, None, NULL);
+                glXDestroyContext(display, glc);
+                XDestroyWindow(display, main_win);
+                XCloseDisplay(display);
+                return 0;
+            }
         } else if (xev.type == ButtonPress) {
             switch (xev.xbutton.button) {
                 case Button1:
