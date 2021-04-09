@@ -160,6 +160,13 @@ struct triangles_manager {
         glEnableVertexAttribArray(0);
     }
 
+    void unload_data(){
+        glDeleteProgram(shaderProgram);
+        glDeleteVertexArrays(1, &VAO);
+        glDeleteBuffers(1, &VBO);
+        _data.clear();
+    }
+
     void add_triangle_by_one_vertex(GLfloat x, GLfloat y) {
         size_t prev_capacity = _data.capacity();
         size_t prev_size = _data.size();
@@ -257,12 +264,6 @@ void update_viewport(){
     HEIGHT = gwa.height;
 }
 
-void exit(){
-    glXMakeCurrent(display, None, NULL);
-    glXDestroyContext(display, glc);
-    XDestroyWindow(display, main_win);
-    XCloseDisplay(display);
-}
 
 
 int main() {
@@ -272,6 +273,8 @@ int main() {
     triangles.load_data({}, get_shader_program(vertex_shader_source, fragment_shader_source));
     int index_of_clicked_triangle;
     glm::vec3 d_vec_pos;
+    Atom wmDeleteMessage = XInternAtom(display, "WM_DELETE_WINDOW", False);
+    XSetWMProtocols(display, main_win, &wmDeleteMessage, 1);
     while (True) {
         XNextEvent(display, &xev);
         update_mouse();
@@ -279,10 +282,14 @@ int main() {
             update_viewport();
         } else if (xev.type == KeyPress) {
             if (XLookupKeysym(&xev.xkey, 0) == XK_Escape) {
-                exit();
-                return 0;
+                break;
             }
-        } else if (xev.type == ButtonPress) {
+        }
+        else if(xev.type == ClientMessage && xev.xclient.data.l[0] == wmDeleteMessage)
+        {
+            break;
+        }
+        else if (xev.type == ButtonPress) {
             if (xev.xbutton.button == Button1) {
                 is_lbutton_pressed = true;
                 triangles.add_triangle_by_one_vertex(norm_mouse_x, norm_mouse_y);
@@ -307,7 +314,17 @@ int main() {
             triangles.update_triangle_pos((int)triangles._data.size() - 1, norm_mouse_x, norm_mouse_y);
         }
         triangles.draw();
+        GLenum error = glGetError();
+        if(error != GL_NO_ERROR) {
+            std::cerr << error << std::endl;
+            break;
+        }
         glXSwapBuffers(display, main_win);//exchange front and back buffers
     }
+    triangles.unload_data();
+    glXMakeCurrent(display, None, NULL);
+    glXDestroyContext(display, glc);
+    XDestroyWindow(display, main_win);
+    XCloseDisplay(display);
     return 0;
 }
