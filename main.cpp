@@ -23,6 +23,11 @@ GLfloat norm_mouse_y;
 bool is_rbutton_pressed = false;
 bool is_lbutton_pressed = false;
 
+Window window_returned;
+int root_x, root_y;
+int win_x, win_y;
+unsigned int mask_return;
+
 
 Display *display;
 Window root_win;
@@ -36,14 +41,62 @@ XWindowAttributes gwa;
 XEvent xev;
 
 
-GLchar *vertexShaderSource =
+GLchar *vertex_shader_source =
+        #include "vertexS.glsl"
+                ;
+GLchar *fragment_shader_source =
+        #include "fragmentS.glsl"
+                ;
 
-#include "vertexS.glsl"
-        ;
-GLchar *fragmentShaderSource =
+GLuint compile_shader(GLchar *shader_source, GLenum shader_type){
+    GLuint shader;
+    shader = glCreateShader(shader_type);
+    glShaderSource(shader, 1, &shader_source, NULL);
+    glCompileShader(shader);
+    return shader;
+}
 
-#include "fragmentS.glsl"
-        ;
+bool check_shader_compilation(GLuint shader){
+    int success;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char info_log[512];
+        glGetShaderInfoLog(shader, 512, NULL, info_log);
+        std::cerr << "SHADER COMPILATION FAILED\n" << info_log << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool check_shader_linking(GLuint shader_program){
+    int success;
+    glGetProgramiv(shader_program, GL_LINK_STATUS, &success);
+    if (!success) {
+        char info_log[512];
+        glGetProgramInfoLog(shader_program, sizeof(info_log), NULL, info_log);
+        std::cerr << "SHADER LINKING FAILED\n" << info_log << std::endl;
+        return false;
+    }
+    return true;
+}
+
+GLuint get_shader_program(GLchar* vertex_source, GLchar* fragment_source) {
+    GLuint vertex_shader = compile_shader(vertex_source, GL_VERTEX_SHADER);
+    GLuint fragment_shader = compile_shader(fragment_source, GL_FRAGMENT_SHADER);
+    check_shader_compilation(vertex_shader);
+    check_shader_compilation(fragment_shader);
+    //link shaders
+    GLuint shader_program;
+    shader_program = glCreateProgram();
+    glAttachShader(shader_program, vertex_shader);
+    glAttachShader(shader_program, fragment_shader);
+    glLinkProgram(shader_program);
+    check_shader_linking(shader_program);
+    //
+    glDeleteShader(vertex_shader);
+    glDeleteShader(fragment_shader);
+    return shader_program;
+}
 
 GLfloat norm_x(GLfloat x, int width) {
     return x * (2.0f / width) - 1.0f;
@@ -51,41 +104,6 @@ GLfloat norm_x(GLfloat x, int width) {
 
 GLfloat norm_y(GLfloat y, int height) {
     return -y * (2.0f / height) + 1.0f;
-}
-
-GLuint get_shader_program() {
-    //compile shaders
-    GLuint vertexShader;
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-    GLuint fragmentShader;
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    //check shaders compilation
-    int success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    //link shaders
-    GLuint shaderProgram;
-    shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    //
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    return shaderProgram;
 }
 
 
@@ -159,7 +177,7 @@ struct triangles_manager {
 
     int get_index_of_clicked_triangle(GLfloat x, GLfloat y) {
         auto point = glm::vec3(x, y, 0.0f);
-        for (int i = _data.size() - 1; i >= 0; --i)
+        for (int i = (int)_data.size() - 1; i >= 0; --i)
             if (is_point_in_triangle(point, _data[i])) {
                 return i;
             }
@@ -178,7 +196,7 @@ struct triangles_manager {
     }
 
 
-    void Draw() {
+    void draw() {
         glClear(GL_COLOR_BUFFER_BIT);
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO);
@@ -190,9 +208,9 @@ struct triangles_manager {
 
 std::array<GLfloat, 3> get_float_from_rgb(unsigned long rgb) {
     std::array<GLfloat, 3> float_colors{};
-    std::get<0>(float_colors) = ((rgb & (0xff))) / static_cast<GLfloat>(0xff);
-    std::get<1>(float_colors) = ((rgb & (0xff << 8)) >> 8) / static_cast<GLfloat>(0xff);
-    std::get<2>(float_colors) = ((rgb & (0xff << 16)) >> 16) / static_cast<GLfloat>(0xff);
+    std::get<0>(float_colors) = ((rgb & (0xff))) / (GLfloat)0xff;
+    std::get<1>(float_colors) = ((rgb & (0xff << 8)) >> 8) / (GLfloat)(0xff);
+    std::get<2>(float_colors) = ((rgb & (0xff << 16)) >> 16) / (GLfloat)(0xff);
     return float_colors;
 }
 
@@ -222,38 +240,46 @@ void initGL() {
                 std::get<2>(bg_fcolor), 1.0f);
 }
 
+void update_mouse(){
+    XQueryPointer(display, main_win, &window_returned,
+                  &window_returned, &root_x, &root_y, &win_x, &win_y,
+                  &mask_return);
+    mouse_x = win_x;
+    mouse_y = win_y;
+    norm_mouse_x = norm_x(mouse_x, WIDTH);
+    norm_mouse_y = norm_y(mouse_y, HEIGHT);
+}
+
+void update_viewport(){
+    XGetWindowAttributes(display, main_win, &gwa);
+    glViewport(0, 0, gwa.width, gwa.height);
+    WIDTH = gwa.width;
+    HEIGHT = gwa.height;
+}
+
+void exit(){
+    glXMakeCurrent(display, None, NULL);
+    glXDestroyContext(display, glc);
+    XDestroyWindow(display, main_win);
+    XCloseDisplay(display);
+}
+
 
 int main() {
     initX();
     initGL();
     triangles_manager triangles;
-    triangles.load_data({}, get_shader_program());
-    Window window_returned;
-    int root_x, root_y;
-    int win_x, win_y;
-    unsigned int mask_return;
+    triangles.load_data({}, get_shader_program(vertex_shader_source, fragment_shader_source));
     int index_of_clicked_triangle;
     glm::vec3 d_vec_pos;
     while (True) {
         XNextEvent(display, &xev);
-        XQueryPointer(display, main_win, &window_returned,
-                      &window_returned, &root_x, &root_y, &win_x, &win_y,
-                      &mask_return);
-        mouse_x = win_x;
-        mouse_y = win_y;
-        norm_mouse_x = norm_x(mouse_x, WIDTH);
-        norm_mouse_y = norm_y(mouse_y, HEIGHT);
+        update_mouse();
         if (xev.type == Expose) {
-            XGetWindowAttributes(display, main_win, &gwa);
-            glViewport(0, 0, gwa.width, gwa.height);
-            WIDTH = gwa.width;
-            HEIGHT = gwa.height;
+            update_viewport();
         } else if (xev.type == KeyPress) {
             if (XLookupKeysym(&xev.xkey, 0) == XK_Escape) {
-                glXMakeCurrent(display, None, NULL);
-                glXDestroyContext(display, glc);
-                XDestroyWindow(display, main_win);
-                XCloseDisplay(display);
+                exit();
                 return 0;
             }
         } else if (xev.type == ButtonPress) {
@@ -273,17 +299,15 @@ int main() {
                 is_rbutton_pressed = false;
             if (xev.xbutton.button == Button1)
                 is_lbutton_pressed = false;
-
         }
         if (is_rbutton_pressed && index_of_clicked_triangle != -1) {
             triangles.update_triangle_pos(index_of_clicked_triangle, norm_mouse_x + d_vec_pos.x, norm_mouse_y + d_vec_pos.y);
         }
         if (is_lbutton_pressed) {
-            triangles.update_triangle_pos(triangles._data.size() - 1, norm_mouse_x, norm_mouse_y);
+            triangles.update_triangle_pos((int)triangles._data.size() - 1, norm_mouse_x, norm_mouse_y);
         }
-        triangles.Draw();
+        triangles.draw();
         glXSwapBuffers(display, main_win);//exchange front and back buffers
     }
-
     return 0;
 }
