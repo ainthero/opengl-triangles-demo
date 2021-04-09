@@ -20,6 +20,7 @@ float mouse_y;
 float click_x;
 float click_y;
 bool is_rbutton_pressed = false;
+bool is_lbutton_pressed = false;
 
 
 Display *display;
@@ -246,6 +247,8 @@ int main() {
                 case Button1:
                     click_x = xev.xbutton.x;
                     click_y = xev.xbutton.y;
+                    is_lbutton_pressed = true;
+                    std::cout<<triangles._data.size()<<std::endl;
                     triangles.add_triangle_by_one_vertex(click_x, click_y);
                     std::cout << "Mouse click left button: " << click_x << ' ' << click_y << std::endl;
                     break;
@@ -262,9 +265,15 @@ int main() {
         } else if (xev.type == ButtonRelease) {
             if (xev.xbutton.button == Button3)
                 is_rbutton_pressed = false;
+            if (xev.xbutton.button == Button1)
+                is_lbutton_pressed = false;
+
         }
         if (is_rbutton_pressed && index_of_clicked_triangle != -1){
             triangles.update_triangle_pos(index_of_clicked_triangle, mouse_x, mouse_y);
+        }
+        if (is_lbutton_pressed){
+            triangles.update_triangle_pos(triangles._data.size() - 1, mouse_x, mouse_y);
         }
         triangles.Draw();
         glXSwapBuffers(display, main_win);//exchange front and back buffers
