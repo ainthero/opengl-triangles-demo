@@ -15,10 +15,11 @@
 int WIDTH = 800;
 int HEIGHT = 600;
 
-float mouse_x;
-float mouse_y;
-float click_x;
-float click_y;
+GLfloat mouse_x;
+GLfloat mouse_y;
+GLfloat click_x;
+GLfloat click_y;
+
 bool is_rbutton_pressed = false;
 bool is_lbutton_pressed = false;
 
@@ -36,13 +37,21 @@ XEvent xev;
 
 
 GLchar *vertexShaderSource =
-        #include "vertexS.glsl"
-;
 
+#include "vertexS.glsl"
+        ;
 GLchar *fragmentShaderSource =
-        #include "fragmentS.glsl"
-;
 
+#include "fragmentS.glsl"
+        ;
+
+GLfloat norm_x(GLfloat x, int width) {
+    return x * (2.0f / width) - 1.0f;
+}
+
+GLfloat norm_y(GLfloat y, int height) {
+    return -y * (2.0f / height) + 1.0f;
+}
 
 GLuint get_shader_program() {
     //compile shaders
@@ -98,14 +107,12 @@ bool is_point_in_triangle(glm::vec3 point, triangle tri) {
            is_same_side(point, tri.c, tri.a, tri.b);
 }
 
-triangle get_triangle_by_pos(float x, float y){
-    float h = 0.10;
-    x = x * (2.0f / WIDTH) - 1.0f;
-    y = -y * (2.0f / HEIGHT) + 1.0f;
-    float x1 = x - h;
-    float x2 = x + h;
-    float y1 = y + 1.5f * h;
-    float y2 = y + 1.5f * h;
+triangle gen_triangle_by_pos(GLfloat x, GLfloat y) {
+    GLfloat h = 0.10;
+    GLfloat x1 = x - h;
+    GLfloat x2 = x + h;
+    GLfloat y1 = y + 1.5f * h;
+    GLfloat y2 = y + 1.5f * h;
     return triangle{glm::vec3(x, y, 0.0f),
                     glm::vec3(x1, y1, 0.0f),
                     glm::vec3(x2, y2, 0.0f)};
@@ -123,9 +130,9 @@ struct triangles_manager {
 
     ~triangles_manager() = default;
 
-    void load_data(const std::vector<triangle> &data) {
+    void load_data(const std::vector<triangle> &data, GLuint shader_program) {
         _data = data;
-        shaderProgram = get_shader_program();
+        shaderProgram = shader_program;
         glGenBuffers(1, &VBO);
         glGenVertexArrays(1, &VAO);
         glBindVertexArray(VAO);
@@ -135,10 +142,10 @@ struct triangles_manager {
         glEnableVertexAttribArray(0);
     }
 
-    void add_triangle_by_one_vertex(float x, float y) {
+    void add_triangle_by_one_vertex(GLfloat x, GLfloat y) {
         size_t prev_capacity = _data.capacity();
         size_t prev_size = _data.size();
-        auto to_push_back = get_triangle_by_pos(x, y);
+        auto to_push_back = gen_triangle_by_pos(x, y);
         _data.push_back(to_push_back);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         if (_data.capacity() != prev_capacity) {
@@ -150,22 +157,24 @@ struct triangles_manager {
         }
     }
 
-    int get_index_of_clicked_triangle(float x, float y) {
-        x = x * (2.0f / WIDTH) - 1.0f;
-        y = -y * (2.0f / HEIGHT) + 1.0f;
+    int get_index_of_clicked_triangle(GLfloat x, GLfloat y) {
         auto point = glm::vec3(x, y, 0.0f);
         for (int i = _data.size() - 1; i >= 0; --i)
-            if (is_point_in_triangle(point, _data[i])){
+            if (is_point_in_triangle(point, _data[i])) {
                 return i;
             }
         return -1;
     }
 
-    void update_triangle_pos(int index, float x, float y){
-        auto new_tri = get_triangle_by_pos(x, y);
+    void update_triangle_pos(int index, GLfloat x, GLfloat y) {
+        auto new_tri = gen_triangle_by_pos(x, y);
         _data[index] = new_tri;
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferSubData(GL_ARRAY_BUFFER, index * sizeof(triangle), sizeof(triangle), &new_tri);
+    }
+
+    glm::vec3 get_vertex(int index_tri, int ind_vertex) {
+        return *(&_data[index_tri].a + sizeof(glm::vec3) * ind_vertex);
     }
 
 
@@ -208,7 +217,9 @@ void initGL() {
     glc = glXCreateContext(display, vi, NULL, GL_TRUE);//create context for opengl, GL_FALSE for network
     glXMakeCurrent(display, main_win, glc);//bind context to window
     auto bg_fcolor = get_float_from_rgb(0x25854b);
-    glClearColor(std::get<0>(bg_fcolor), std::get<1>(bg_fcolor), std::get<2>(bg_fcolor), 1.0f);
+    glClearColor(std::get<0>(bg_fcolor),
+               std::get<1>(bg_fcolor),
+                std::get<2>(bg_fcolor), 1.0f);
 }
 
 
@@ -216,12 +227,13 @@ int main() {
     initX();
     initGL();
     triangles_manager triangles;
-    triangles.load_data({});
+    triangles.load_data({}, get_shader_program());
     Window window_returned;
     int root_x, root_y;
     int win_x, win_y;
     unsigned int mask_return;
     int index_of_clicked_triangle;
+    glm::vec3 d_vec_pos;
     while (True) {
         XNextEvent(display, &xev);
         XQueryPointer(display, main_win, &window_returned,
@@ -230,12 +242,12 @@ int main() {
         mouse_x = win_x;
         mouse_y = win_y;
         if (xev.type == Expose) {
-            XGetWindowAttributes(display, main_win, &gwa);//get win atts, including current width and height
+            XGetWindowAttributes(display, main_win, &gwa);
             glViewport(0, 0, gwa.width, gwa.height);
             WIDTH = gwa.width;
             HEIGHT = gwa.height;
         } else if (xev.type == KeyPress) {
-            if (XLookupKeysym(&xev.xkey, 0) == XK_Escape){
+            if (XLookupKeysym(&xev.xkey, 0) == XK_Escape) {
                 glXMakeCurrent(display, None, NULL);
                 glXDestroyContext(display, glc);
                 XDestroyWindow(display, main_win);
@@ -243,24 +255,20 @@ int main() {
                 return 0;
             }
         } else if (xev.type == ButtonPress) {
-            switch (xev.xbutton.button) {
-                case Button1:
-                    click_x = xev.xbutton.x;
-                    click_y = xev.xbutton.y;
-                    is_lbutton_pressed = true;
-                    std::cout<<triangles._data.size()<<std::endl;
-                    triangles.add_triangle_by_one_vertex(click_x, click_y);
-                    std::cout << "Mouse click left button: " << click_x << ' ' << click_y << std::endl;
-                    break;
-                case Button3:
-                    click_x = xev.xbutton.x;
-                    click_y = xev.xbutton.y;
-                    is_rbutton_pressed = true;
-                    index_of_clicked_triangle = triangles.get_index_of_clicked_triangle(click_x, click_y);
-                    std::cout << "Mouse click right button: " << index_of_clicked_triangle << std::endl;
-                    break;
-                default:
-                    break;
+            click_x = xev.xbutton.x;
+            click_y = xev.xbutton.y;
+            GLfloat norm_click_x = norm_x(click_x, WIDTH);
+            GLfloat norm_click_y = norm_y(click_y, HEIGHT);
+            if (xev.xbutton.button == Button1) {
+                is_lbutton_pressed = true;
+                triangles.add_triangle_by_one_vertex(norm_click_x, norm_click_y);
+                std::cout << "Mouse click left button: " << click_x << ' ' << click_y << std::endl;
+            } else if (xev.xbutton.button == Button3) {
+                is_rbutton_pressed = true;
+                index_of_clicked_triangle = triangles.get_index_of_clicked_triangle(norm_click_x, norm_click_y);
+                d_vec_pos = triangles.get_vertex(index_of_clicked_triangle, 0) -
+                            glm::vec3(norm_click_x, norm_click_y, 0.0f);
+                std::cout << "Mouse click right button: " << index_of_clicked_triangle << std::endl;
             }
         } else if (xev.type == ButtonRelease) {
             if (xev.xbutton.button == Button3)
@@ -269,14 +277,15 @@ int main() {
                 is_lbutton_pressed = false;
 
         }
-        if (is_rbutton_pressed && index_of_clicked_triangle != -1){
-            triangles.update_triangle_pos(index_of_clicked_triangle, mouse_x, mouse_y);
+        if (is_rbutton_pressed && index_of_clicked_triangle != -1) {
+            triangles.update_triangle_pos(index_of_clicked_triangle, norm_x(mouse_x, WIDTH) + d_vec_pos.x, norm_y(mouse_y, HEIGHT) + d_vec_pos.y);
         }
-        if (is_lbutton_pressed){
-            triangles.update_triangle_pos(triangles._data.size() - 1, mouse_x, mouse_y);
+        if (is_lbutton_pressed) {
+            triangles.update_triangle_pos(triangles._data.size() - 1, norm_x(mouse_x, WIDTH), norm_y(mouse_y, HEIGHT));
         }
         triangles.Draw();
         glXSwapBuffers(display, main_win);//exchange front and back buffers
     }
+
     return 0;
 }
