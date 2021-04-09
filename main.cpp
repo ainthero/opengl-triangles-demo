@@ -17,8 +17,8 @@ int HEIGHT = 600;
 
 GLfloat mouse_x;
 GLfloat mouse_y;
-GLfloat click_x;
-GLfloat click_y;
+GLfloat norm_mouse_x;
+GLfloat norm_mouse_y;
 
 bool is_rbutton_pressed = false;
 bool is_lbutton_pressed = false;
@@ -241,6 +241,8 @@ int main() {
                       &mask_return);
         mouse_x = win_x;
         mouse_y = win_y;
+        norm_mouse_x = norm_x(mouse_x, WIDTH);
+        norm_mouse_y = norm_y(mouse_y, HEIGHT);
         if (xev.type == Expose) {
             XGetWindowAttributes(display, main_win, &gwa);
             glViewport(0, 0, gwa.width, gwa.height);
@@ -255,19 +257,15 @@ int main() {
                 return 0;
             }
         } else if (xev.type == ButtonPress) {
-            click_x = xev.xbutton.x;
-            click_y = xev.xbutton.y;
-            GLfloat norm_click_x = norm_x(click_x, WIDTH);
-            GLfloat norm_click_y = norm_y(click_y, HEIGHT);
             if (xev.xbutton.button == Button1) {
                 is_lbutton_pressed = true;
-                triangles.add_triangle_by_one_vertex(norm_click_x, norm_click_y);
-                std::cout << "Mouse click left button: " << click_x << ' ' << click_y << std::endl;
+                triangles.add_triangle_by_one_vertex(norm_mouse_x, norm_mouse_y);
+                std::cout << "Mouse click left button: " << mouse_x << ' ' << mouse_y << std::endl;
             } else if (xev.xbutton.button == Button3) {
                 is_rbutton_pressed = true;
-                index_of_clicked_triangle = triangles.get_index_of_clicked_triangle(norm_click_x, norm_click_y);
+                index_of_clicked_triangle = triangles.get_index_of_clicked_triangle(norm_mouse_x, norm_mouse_y);
                 d_vec_pos = triangles.get_vertex(index_of_clicked_triangle, 0) -
-                            glm::vec3(norm_click_x, norm_click_y, 0.0f);
+                            glm::vec3(norm_mouse_x, norm_mouse_y, 0.0f);
                 std::cout << "Mouse click right button: " << index_of_clicked_triangle << std::endl;
             }
         } else if (xev.type == ButtonRelease) {
@@ -278,10 +276,10 @@ int main() {
 
         }
         if (is_rbutton_pressed && index_of_clicked_triangle != -1) {
-            triangles.update_triangle_pos(index_of_clicked_triangle, norm_x(mouse_x, WIDTH) + d_vec_pos.x, norm_y(mouse_y, HEIGHT) + d_vec_pos.y);
+            triangles.update_triangle_pos(index_of_clicked_triangle, norm_mouse_x + d_vec_pos.x, norm_mouse_y + d_vec_pos.y);
         }
         if (is_lbutton_pressed) {
-            triangles.update_triangle_pos(triangles._data.size() - 1, norm_x(mouse_x, WIDTH), norm_y(mouse_y, HEIGHT));
+            triangles.update_triangle_pos(triangles._data.size() - 1, norm_mouse_x, norm_mouse_y);
         }
         triangles.Draw();
         glXSwapBuffers(display, main_win);//exchange front and back buffers
