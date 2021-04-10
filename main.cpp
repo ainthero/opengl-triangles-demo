@@ -99,8 +99,8 @@ int main() {
     initX();
     initGL();
     triangles_manager triangles;
-    triangles.load_data({}, get_shader_program(file_to_string("../vertexS.glsl"),
-                                               file_to_string("../fragmentS.glsl")));
+    triangles.load_data({}, get_shader_program(file_to_string("vertexS.glsl"),
+                                               file_to_string("fragmentS.glsl")));
     int index_of_clicked_triangle;
     glm::vec3 d_vec_pos;
     Atom wmDeleteMessage = XInternAtom(display, "WM_DELETE_WINDOW", False);
