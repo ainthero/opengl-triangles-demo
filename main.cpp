@@ -6,13 +6,13 @@
 #include <GL/glx.h>
 #include <GL/glext.h>
 #include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <cassert>
 #include <array>
 #include <iostream>
 #include <vector>
-#include <sstream>
-#include <fstream>
+
+#include "shader_import.h"
+#include "geometry.h"
+#include "triangles_manager.h"
 
 int WIDTH = 800;
 int HEIGHT = 600;
@@ -42,183 +42,6 @@ GLXContext glc;
 XWindowAttributes gwa;
 XEvent xev;
 
-std::string file_to_string(const std::string &file_path) {
-    std::string shader_code;
-    std::ifstream shader_stream(file_path, std::ios::in);
-    if (shader_stream.is_open()) {
-        std::stringstream sstr;
-        sstr << shader_stream.rdbuf();
-        shader_code = sstr.str();
-        shader_stream.close();
-    }
-    return shader_code;
-}
-
-GLuint compile_shader(const std::string &shader_source, GLenum shader_type) {
-    GLuint shader;
-    shader = glCreateShader(shader_type);
-    char const *shader_pointer = shader_source.c_str();
-    glShaderSource(shader, 1, &shader_pointer, NULL);
-    glCompileShader(shader);
-    return shader;
-}
-
-bool check_shader_compilation(GLuint shader) {
-    int success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char info_log[512];
-        glGetShaderInfoLog(shader, 512, NULL, info_log);
-        std::cerr << "SHADER COMPILATION FAILED\n" << info_log << std::endl;
-        return false;
-    }
-    return true;
-}
-
-bool check_shader_linking(GLuint shader_program) {
-    int success;
-    glGetProgramiv(shader_program, GL_LINK_STATUS, &success);
-    if (!success) {
-        char info_log[512];
-        glGetProgramInfoLog(shader_program, sizeof(info_log), NULL, info_log);
-        std::cerr << "SHADER LINKING FAILED\n" << info_log << std::endl;
-        return false;
-    }
-    return true;
-}
-
-GLuint get_shader_program(const std::string &vertex_source, const std::string &fragment_source) {
-    GLuint vertex_shader = compile_shader(vertex_source, GL_VERTEX_SHADER);
-    GLuint fragment_shader = compile_shader(fragment_source, GL_FRAGMENT_SHADER);
-    check_shader_compilation(vertex_shader);
-    check_shader_compilation(fragment_shader);
-    //link shaders
-    GLuint shader_program;
-    shader_program = glCreateProgram();
-    glAttachShader(shader_program, vertex_shader);
-    glAttachShader(shader_program, fragment_shader);
-    glLinkProgram(shader_program);
-    check_shader_linking(shader_program);
-    //
-    glDeleteShader(vertex_shader);
-    glDeleteShader(fragment_shader);
-    return shader_program;
-}
-
-GLfloat norm_x(GLfloat x, int width) {
-    return x * (2.0f / width) - 1.0f;
-}
-
-GLfloat norm_y(GLfloat y, int height) {
-    return -y * (2.0f / height) + 1.0f;
-}
-
-
-struct triangle {
-    glm::vec3 a;
-    glm::vec3 b;
-    glm::vec3 c;
-};
-
-bool is_same_side(glm::vec3 p1, glm::vec3 p2, glm::vec3 a, glm::vec3 b) {
-    glm::vec3 cross1 = glm::cross(b - a, p1 - a);
-    glm::vec3 cross2 = glm::cross(b - a, p2 - a);
-    return glm::dot(cross1, cross2) >= 0.0f;
-}
-
-bool is_point_in_triangle(glm::vec3 point, triangle tri) {
-    return is_same_side(point, tri.a, tri.b, tri.c) &&
-           is_same_side(point, tri.b, tri.a, tri.c) &&
-           is_same_side(point, tri.c, tri.a, tri.b);
-}
-
-triangle gen_triangle_by_pos(GLfloat x, GLfloat y) {
-    GLfloat h = 0.10;
-    GLfloat x1 = x - h;
-    GLfloat x2 = x + h;
-    GLfloat y1 = y + 2.f * h;
-    GLfloat y2 = y + 2.f * h;
-    return triangle{glm::vec3(x, y, 0.0f),
-                    glm::vec3(x1, y1, 0.0f),
-                    glm::vec3(x2, y2, 0.0f)};
-}
-
-
-struct triangles_manager {
-    GLuint VBO;
-    GLuint VAO;
-    GLuint shaderProgram;
-    std::vector<triangle> _data;
-
-
-    triangles_manager() = default;
-
-    ~triangles_manager() = default;
-
-    void load_data(const std::vector<triangle> &data, GLuint shader_program) {
-        _data = data;
-        shaderProgram = shader_program;
-        glGenBuffers(1, &VBO);
-        glGenVertexArrays(1, &VAO);
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, _data.size() * sizeof(triangle), _data.data(), GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void *) 0);
-        glEnableVertexAttribArray(0);
-    }
-
-    void unload_data() {
-        glDeleteProgram(shaderProgram);
-        glDeleteVertexArrays(1, &VAO);
-        glDeleteBuffers(1, &VBO);
-        _data.clear();
-    }
-
-    void add_triangle_by_one_vertex(GLfloat x, GLfloat y) {
-        size_t prev_capacity = _data.capacity();
-        size_t prev_size = _data.size();
-        auto to_push_back = gen_triangle_by_pos(x, y);
-        _data.push_back(to_push_back);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        if (_data.capacity() != prev_capacity) {
-            glBufferData(GL_ARRAY_BUFFER, _data.capacity() * sizeof(triangle), NULL, GL_DYNAMIC_DRAW);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, _data.size() * sizeof(triangle), _data.data());
-            std::cout << "VBO realloc" << std::endl;
-        } else {
-            glBufferSubData(GL_ARRAY_BUFFER, prev_size * sizeof(triangle), sizeof(triangle), &to_push_back);
-        }
-    }
-
-    int get_index_of_clicked_triangle(GLfloat x, GLfloat y) const{
-        auto point = glm::vec3(x, y, 0.0f);
-        for (int i = (int) _data.size() - 1; i >= 0; --i)
-            if (is_point_in_triangle(point, _data[i])) {
-                return i;
-            }
-        return -1;
-    }
-
-    void update_triangle_pos(int index, GLfloat x, GLfloat y) {
-        auto new_tri = gen_triangle_by_pos(x, y);
-        _data[index] = new_tri;
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferSubData(GL_ARRAY_BUFFER, index * sizeof(triangle), sizeof(triangle), &new_tri);
-    }
-
-    glm::vec3 get_vertex(int index_tri, int ind_vertex) const{
-        return *(&_data[index_tri].a + sizeof(glm::vec3) * ind_vertex);
-    }
-
-
-    void draw() const{
-        glClear(GL_COLOR_BUFFER_BIT);
-        glUseProgram(shaderProgram);
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, _data.size() * 9);
-        glBindVertexArray(0);
-    }
-};
-
 
 std::array<GLfloat, 3> get_float_from_rgb(unsigned long rgb) {
     std::array<GLfloat, 3> float_colors{};
@@ -227,6 +50,7 @@ std::array<GLfloat, 3> get_float_from_rgb(unsigned long rgb) {
     std::get<2>(float_colors) = ((rgb & (0xff << 16)) >> 16) / (GLfloat) (0xff);
     return float_colors;
 }
+
 
 void initX() {
     //connect to X server with NULL display
