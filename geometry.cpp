@@ -21,8 +21,7 @@ bool is_point_in_triangle(glm::vec3 point, triangle tri) {
            is_same_side(point, tri.c, tri.a, tri.b);
 }
 
-triangle gen_triangle_by_pos(GLfloat x, GLfloat y) {
-    GLfloat h = 0.10;
+triangle gen_triangle_by_pos(GLfloat x, GLfloat y, GLfloat h) {
     GLfloat x1 = x - h;
     GLfloat x2 = x + h;
     GLfloat y1 = y + 2.f * h;
@@ -31,4 +30,6 @@ triangle gen_triangle_by_pos(GLfloat x, GLfloat y) {
                     glm::vec3(x1, y1, 0.0f),
                     glm::vec3(x2, y2, 0.0f)};
 }
+
+
 

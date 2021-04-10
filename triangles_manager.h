@@ -9,11 +9,12 @@
 #include "geometry.h"
 
 
-struct triangles_manager {
+class triangles_manager {
     GLuint VBO;
     GLuint VAO;
     GLuint shaderProgram;
     std::vector<triangle> _data;
+public:
 
 
     triangles_manager() = default;
@@ -24,15 +25,17 @@ struct triangles_manager {
 
     void unload_data();
 
-    void add_triangle_by_one_vertex(GLfloat x, GLfloat y);
+    void add_triangle(triangle tri);
 
     int get_index_of_clicked_triangle(GLfloat x, GLfloat y) const;
 
-    void update_triangle_pos(int index, GLfloat x, GLfloat y);
+    void update_triangle(int index, triangle tri);
 
     glm::vec3 get_vertex(int index_tri, int ind_vertex) const;
 
     void draw() const;
+
+    int size() const;
 };
 
 #endif //JBTREUG_TRIANGLES_MANAGER_H

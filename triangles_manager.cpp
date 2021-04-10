@@ -20,10 +20,10 @@ void triangles_manager::unload_data() {
     _data.clear();
 }
 
-void triangles_manager::add_triangle_by_one_vertex(GLfloat x, GLfloat y) {
+void triangles_manager::add_triangle(triangle tri) {
     size_t prev_capacity = _data.capacity();
     size_t prev_size = _data.size();
-    auto to_push_back = gen_triangle_by_pos(x, y);
+    auto to_push_back = tri;
     _data.push_back(to_push_back);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     if (_data.capacity() != prev_capacity) {
@@ -44,11 +44,10 @@ int triangles_manager::get_index_of_clicked_triangle(GLfloat x, GLfloat y) const
     return -1;
 }
 
-void triangles_manager::update_triangle_pos(int index, GLfloat x, GLfloat y) {
-    auto new_tri = gen_triangle_by_pos(x, y);
-    _data[index] = new_tri;
+void triangles_manager::update_triangle(int index, triangle tri) {
+    _data[index] = tri;
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferSubData(GL_ARRAY_BUFFER, index * sizeof(triangle), sizeof(triangle), &new_tri);
+    glBufferSubData(GL_ARRAY_BUFFER, index * sizeof(triangle), sizeof(triangle), &tri);
 }
 
 glm::vec3 triangles_manager::get_vertex(int index_tri, int ind_vertex) const {
@@ -62,4 +61,8 @@ void triangles_manager::draw() const {
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, _data.size() * 9);
     glBindVertexArray(0);
+}
+
+int triangles_manager::size() const {
+    return _data.size();
 }

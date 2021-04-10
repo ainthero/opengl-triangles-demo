@@ -4,11 +4,9 @@
 #include <X11/Xutil.h>
 #include <GL/gl.h>
 #include <GL/glx.h>
-#include <GL/glext.h>
 #include <glm/glm.hpp>
 #include <array>
 #include <iostream>
-#include <vector>
 
 #include "shader_import.h"
 #include "geometry.h"
@@ -16,6 +14,7 @@
 
 int WIDTH = 800;
 int HEIGHT = 600;
+float TRI_HEIGHT = .2;
 
 GLfloat mouse_x;
 GLfloat mouse_y;
@@ -120,7 +119,7 @@ int main() {
         } else if (xev.type == ButtonPress) {
             if (xev.xbutton.button == Button1) {
                 is_lbutton_pressed = true;
-                triangles.add_triangle_by_one_vertex(norm_mouse_x, norm_mouse_y);
+                triangles.add_triangle(gen_triangle_by_pos(norm_mouse_x, norm_mouse_y, TRI_HEIGHT));
                 std::cout << "Mouse click left button: " << mouse_x << ' ' << mouse_y << std::endl;
             } else if (xev.xbutton.button == Button3) {
                 is_rbutton_pressed = true;
@@ -136,11 +135,13 @@ int main() {
                 is_lbutton_pressed = false;
         }
         if (is_rbutton_pressed && index_of_clicked_triangle != -1) {
-            triangles.update_triangle_pos(index_of_clicked_triangle, norm_mouse_x + d_vec_pos.x,
-                                          norm_mouse_y + d_vec_pos.y);
+            triangles.update_triangle(index_of_clicked_triangle, gen_triangle_by_pos(norm_mouse_x + d_vec_pos.x,
+                                                                                     norm_mouse_y + d_vec_pos.y,
+                                                                                     TRI_HEIGHT));
         }
         if (is_lbutton_pressed) {
-            triangles.update_triangle_pos((int) triangles._data.size() - 1, norm_mouse_x, norm_mouse_y);
+            triangles.update_triangle(triangles.size() - 1,
+                                      gen_triangle_by_pos(norm_mouse_x, norm_mouse_y, TRI_HEIGHT));
         }
         triangles.draw();
         GLenum error = glGetError();
