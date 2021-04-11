@@ -40,7 +40,7 @@ XSetWindowAttributes swa;
 GLXContext glc;
 XWindowAttributes gwa;
 XEvent xev;
-
+unsigned int event_mask = ExposureMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask;
 
 std::array<GLfloat, 3> get_float_from_rgb(unsigned long rgb) {
     std::array<GLfloat, 3> float_colors{};
@@ -60,7 +60,7 @@ void initX() {
     vi = glXChooseVisual(display, 0, att_list);
     cmap = XCreateColormap(display, root_win, vi->visual, AllocNone);
     swa.colormap = cmap;
-    swa.event_mask = ExposureMask | KeyPressMask | PointerMotionMask | ButtonPressMask | ButtonReleaseMask;
+    swa.event_mask = event_mask;
     main_win = XCreateWindow(display, root_win, 0, 0, WIDTH, HEIGHT, 0, vi->depth, InputOutput, vi->visual,
                              CWColormap | CWEventMask, &swa);
     //CWColormap | CWEventMask - which fields from swa should be taken into account
@@ -106,33 +106,35 @@ int main() {
     Atom wmDeleteMessage = XInternAtom(display, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(display, main_win, &wmDeleteMessage, 1);
     while (True) {
-        XNextEvent(display, &xev);
         update_mouse();
-        if (xev.type == Expose) {
-            update_viewport();
-        } else if (xev.type == KeyPress) {
-            if (XLookupKeysym(&xev.xkey, 0) == XK_Escape) {
+        if (XPending(display)) {
+            XNextEvent(display, &xev);
+            if (xev.type == Expose) {
+                update_viewport();
+            } else if (xev.type == KeyPress) {
+                if (XLookupKeysym(&xev.xkey, 0) == XK_Escape) {
+                    break;
+                }
+            } else if (xev.type == ClientMessage && xev.xclient.data.l[0] == wmDeleteMessage) {
                 break;
+            } else if (xev.type == ButtonPress) {
+                if (xev.xbutton.button == Button1) {
+                    is_lbutton_pressed = true;
+                    triangles.add_triangle(gen_triangle_by_pos(norm_mouse_x, norm_mouse_y, TRI_HEIGHT));
+                    std::cout << "Mouse click left button: " << mouse_x << ' ' << mouse_y << std::endl;
+                } else if (xev.xbutton.button == Button3) {
+                    is_rbutton_pressed = true;
+                    index_of_clicked_triangle = triangles.get_index_of_clicked_triangle(norm_mouse_x, norm_mouse_y);
+                    d_vec_pos = triangles.get_vertex(index_of_clicked_triangle, 0) -
+                                glm::vec3(norm_mouse_x, norm_mouse_y, 0.0f);
+                    std::cout << "Mouse click right button: " << index_of_clicked_triangle << std::endl;
+                }
+            } else if (xev.type == ButtonRelease) {
+                if (xev.xbutton.button == Button3)
+                    is_rbutton_pressed = false;
+                if (xev.xbutton.button == Button1)
+                    is_lbutton_pressed = false;
             }
-        } else if (xev.type == ClientMessage && xev.xclient.data.l[0] == wmDeleteMessage) {
-            break;
-        } else if (xev.type == ButtonPress) {
-            if (xev.xbutton.button == Button1) {
-                is_lbutton_pressed = true;
-                triangles.add_triangle(gen_triangle_by_pos(norm_mouse_x, norm_mouse_y, TRI_HEIGHT));
-                std::cout << "Mouse click left button: " << mouse_x << ' ' << mouse_y << std::endl;
-            } else if (xev.xbutton.button == Button3) {
-                is_rbutton_pressed = true;
-                index_of_clicked_triangle = triangles.get_index_of_clicked_triangle(norm_mouse_x, norm_mouse_y);
-                d_vec_pos = triangles.get_vertex(index_of_clicked_triangle, 0) -
-                            glm::vec3(norm_mouse_x, norm_mouse_y, 0.0f);
-                std::cout << "Mouse click right button: " << index_of_clicked_triangle << std::endl;
-            }
-        } else if (xev.type == ButtonRelease) {
-            if (xev.xbutton.button == Button3)
-                is_rbutton_pressed = false;
-            if (xev.xbutton.button == Button1)
-                is_lbutton_pressed = false;
         }
         if (is_rbutton_pressed && index_of_clicked_triangle != -1) {
             triangles.update_triangle(index_of_clicked_triangle, gen_triangle_by_pos(norm_mouse_x + d_vec_pos.x,
